@@ -1,8 +1,10 @@
+# api/app.py
+import os
 import logging
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from typing import Optional, Dict
+from typing import Dict
 from uuid import uuid4
 from datetime import datetime
 
@@ -10,18 +12,21 @@ from datetime import datetime
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orders-api")
 
+# --- Feature flag from environment ---
+ENABLE_GET_CREATE = True
+
 app = FastAPI(title="Orders API", version="1.0")
 
-# CORS
+# CORS (prototyp, v produkci omezit)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # v produkci omez
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- In-memory storage ---
+# In-memory storage (MVP)
 ORDERS: Dict[str, dict] = {}
 
 
@@ -41,7 +46,7 @@ class OrderOut(BaseModel):
     quantity: int
 
 
-# --- Middleware to log all requests ---
+# --- Middleware to log requests ---
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     logger.info(f"➡️ {request.method} {request.url}")
@@ -50,13 +55,14 @@ async def log_requests(request: Request, call_next):
     return response
 
 
-# --- Endpoints ---
+# --- Health ---
 @app.get("/", tags=["health"])
 def health():
     logger.info("Health check called")
     return {"ok": True, "service": "orders-api", "version": "1.0"}
 
 
+# --- POST (correct way) ---
 @app.post("/orders", response_model=OrderOut, tags=["orders"])
 def create_order(payload: OrderCreate):
     order_id = str(uuid4())
@@ -70,10 +76,11 @@ def create_order(payload: OrderCreate):
         "quantity": payload.quantity,
     }
     ORDERS[order_id] = doc
-    logger.info(f"📝 Order created: {doc}")
+    logger.info(f"📝 [POST] Order created: {doc}")
     return doc
 
 
+# --- GET read ---
 @app.get("/orders/{order_id}", response_model=OrderOut, tags=["orders"])
 def get_order(order_id: str):
     logger.info(f"🔍 Fetching order {order_id}")
@@ -83,3 +90,34 @@ def get_order(order_id: str):
         raise HTTPException(status_code=404, detail="Order not found")
     logger.info(f"✅ Order found: {doc}")
     return doc
+
+
+# --- OPTIONAL: GET-based create (enabled only by env var) ---
+if ENABLE_GET_CREATE:
+
+    @app.get("/orders/create", response_model=OrderOut, tags=["orders"])
+    def create_order_get(
+        customer_email: str = Query(..., description="Customer email"),
+        product_id: str = Query(..., description="Product id / sku"),
+        quantity: int = Query(1, ge=1, description="Quantity"),
+    ):
+        """
+        HACK: Vytvoří objednávku přes GET (volitelně povoleno pomocí ENABLE_GET_CREATE=1).
+        Tento endpoint je určený pouze pro rychlé testy / demo a není REST-konformní.
+        """
+        order_id = str(uuid4())
+        now = datetime.utcnow().isoformat() + "Z"
+        doc = {
+            "id": order_id,
+            "status": "created",
+            "created_at": now,
+            "customer_email": customer_email,
+            "product_id": product_id,
+            "quantity": quantity,
+        }
+        ORDERS[order_id] = doc
+        logger.info(f"📝 [GET] Order created: {doc}")
+        return doc
+
+else:
+    logger.info("GET /orders/create is disabled (ENABLE_GET_CREATE != 1)")
