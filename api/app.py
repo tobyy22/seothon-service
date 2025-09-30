@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from typing import Dict
 from uuid import uuid4
 from datetime import datetime
+from typing import Optional
 
 # --- Logging setup ---
 logging.basicConfig(level=logging.INFO)
@@ -82,13 +83,16 @@ def health():
 
 @app.get("/orders/create", response_model=OrderOut, tags=["orders"])
 def create_order_get(
-    customer_email: str = Query(..., description="Customer email"),
-    product_id: str = Query(..., description="Product id / sku"),
+    customer_email: Optional[str] = Query(
+        "debug@example.com", description="Customer email"
+    ),
+    product_id: Optional[str] = Query("sku_debug", description="Product id / sku"),
     quantity: int = Query(1, ge=1, description="Quantity"),
 ):
     """
-    HACK: Vytvoří objednávku přes GET (volitelně povoleno pomocí ENABLE_GET_CREATE=1).
-    Tento endpoint je určený pouze pro rychlé testy / demo a není REST-konformní.
+    HACK: Vytvoří objednávku přes GET (debug only).
+    Všechny parametry jsou volitelné a mají defaulty.
+    Lze tedy volat prostě /orders/create a vznikne objednávka s default hodnotami.
     """
     order_id = str(uuid4())
     now = datetime.utcnow().isoformat() + "Z"
@@ -101,7 +105,7 @@ def create_order_get(
         "quantity": quantity,
     }
     ORDERS[order_id] = doc
-    logger.info(f"📝 [GET] Order created: {doc}")
+    logger.info(f"📝 [GET-DEBUG] Order created: {doc}")
     return doc
 
 
