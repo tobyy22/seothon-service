@@ -13,7 +13,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("orders-api")
 
 # --- Feature flag from environment ---
-ENABLE_GET_CREATE = 1
+ENABLE_GET_CREATE = "1"
 
 app = FastAPI(title="Orders API", version="1.0")
 
